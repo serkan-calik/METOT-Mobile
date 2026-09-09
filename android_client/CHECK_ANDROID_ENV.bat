@@ -4,7 +4,7 @@ title METOT Mobile - Android Ortam Kontrolu
 chcp 65001 >nul
 echo.
 echo ============================================================
-echo   METOT MOBILE v11.4.82 - VS CODE APK ORTAM KONTROLU
+echo   METOT MOBILE v11.4.84 - VS CODE APK ORTAM KONTROLU
 echo ============================================================
 echo.
 

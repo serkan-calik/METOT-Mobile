@@ -1,4 +1,4 @@
-METOT MOBILE v11.4.82 FINAL — VS CODE APK BUILD
+METOT MOBILE v11.4.84 FINAL — VS CODE APK BUILD
 
 VS CODE İLE NASIL APK OLUŞTURULUR?
 ==================================
@@ -18,7 +18,7 @@ VS CODE İLE NASIL APK OLUŞTURULUR?
    işlemini çalıştırır.
 
 5) Başarılı derleme sonunda android_client klasöründe:
-   METOT-Mobile-v11.4.82.apk
+   METOT-Mobile-v11.4.84.apk
    dosyası oluşur.
 
 6) Bu APK'yı telefona gönderin ve kurun.

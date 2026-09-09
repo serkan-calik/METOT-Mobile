@@ -2,7 +2,7 @@
 title METOT Mobile Standalone APK
 echo.
 echo =============================================
-echo  METOT MOBILE v11.4.82 STANDALONE
+echo  METOT MOBILE v11.4.84 STANDALONE
 echo =============================================
 echo.
 echo IT / Firewall / IP / Port gerektirmez.

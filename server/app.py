@@ -4,7 +4,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from datetime import datetime, timezone
-import os, json, hashlib
+import os, json, hashlib, base64, queue, threading, time, uuid, re
 
 app = Flask(__name__)
 DATABASE_URL = os.environ.get('DATABASE_URL','').strip()
@@ -20,6 +20,87 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expi
 Base = declarative_base()
 SECRET = os.environ.get('METOT_SYNC_SECRET','change-me-before-production')
 serializer = URLSafeTimedSerializer(SECRET, salt='metot-live-sync')
+
+BRIDGE_SECRET = os.environ.get("METOT_BRIDGE_SECRET","").strip()
+BRIDGE_QUEUE = queue.Queue()
+BRIDGE_WAITERS = {}
+BRIDGE_LOCK = threading.Lock()
+BRIDGE_LAST_SEEN = 0.0
+
+def bridge_auth_ok():
+    supplied=request.headers.get("X-METOT-Bridge-Secret","")
+    return bool(BRIDGE_SECRET) and supplied == BRIDGE_SECRET
+
+def _bridge_rewrite_text(text, service):
+    prefix=f"/bridge/pc/{service}"
+    # Root-relative assets and API requests stay on the same proxied local service.
+    replacements=[
+        ('href="/static/', f'href="{prefix}/static/'),
+        ("href='/static/", f"href='{prefix}/static/"),
+        ('src="/static/', f'src="{prefix}/static/'),
+        ("src='/static/", f"src='{prefix}/static/"),
+        ('url("/static/', f'url("{prefix}/static/'),
+        ("url('/static/", f"url('{prefix}/static/"),
+        ("fetch('/api/", f"fetch('{prefix}/api/"),
+        ('fetch("/api/', f'fetch("{prefix}/api/'),
+        ("api('/api/", f"api('{prefix}/api/"),
+        ('api("/api/', f'api("{prefix}/api/'),
+        ('action="/', f'action="{prefix}/'),
+    ]
+    for a,b in replacements:
+        text=text.replace(a,b)
+    if service=="shell":
+        for path in ["approvals","manager-ai","ai-office","simulation-center","mobile","manifest.webmanifest","service-worker.js"]:
+            text=text.replace(f"'{('/'+path)}'", f"'{prefix}/{path}'")
+            text=text.replace(f'"{("/"+path)}"', f'"{prefix}/{path}"')
+    return text
+
+def _bridge_proxy(service, path=""):
+    if service not in {"shell","tool","ca","scrum"}:
+        return jsonify({"error":"Bilinmeyen servis"}),404
+    # If the PC agent is not connected, fail quickly instead of leaving the phone hanging.
+    if time.time()-BRIDGE_LAST_SEEN > 45:
+        return ("METOT PC bağlantısı aktif değil. PC'de METOT v11.4.84 açık olmalıdır.",503,{"Content-Type":"text/plain; charset=utf-8"})
+    jid=uuid.uuid4().hex
+    body=request.get_data(cache=True) or b""
+    headers={}
+    for k,v in request.headers.items():
+        if k.lower() in {"content-type","accept","accept-language","cookie","referer","user-agent","origin","x-requested-with"}:
+            headers[k]=v
+    job={"id":jid,"service":service,"path":"/"+path if path else "/","query":request.query_string.decode("utf-8"),
+         "method":request.method,"headers":headers,"body_b64":base64.b64encode(body).decode("ascii")}
+    ev=threading.Event()
+    with BRIDGE_LOCK:
+        BRIDGE_WAITERS[jid]={"event":ev,"response":None}
+    BRIDGE_QUEUE.put(job)
+    if not ev.wait(75):
+        with BRIDGE_LOCK: BRIDGE_WAITERS.pop(jid,None)
+        return ("METOT PC yanıt vermedi.",504,{"Content-Type":"text/plain; charset=utf-8"})
+    with BRIDGE_LOCK:
+        item=BRIDGE_WAITERS.pop(jid,None)
+    if not item or not item.get("response"):
+        return ("METOT bridge yanıtı alınamadı.",502,{"Content-Type":"text/plain; charset=utf-8"})
+    r=item["response"]
+    data=base64.b64decode(r.get("body_b64") or "")
+    status=int(r.get("status") or 200)
+    rh=dict(r.get("headers") or {})
+    ctype=str(rh.get("Content-Type") or rh.get("content-type") or "")
+    # Rewrite proxied HTML/CSS/JS so absolute URLs stay inside the reverse bridge.
+    if any(x in ctype.lower() for x in ["text/html","text/css","javascript"]):
+        try:
+            txt=data.decode("utf-8")
+            txt=_bridge_rewrite_text(txt,service)
+            data=txt.encode("utf-8")
+        except Exception:
+            pass
+    out_headers={}
+    for k,v in rh.items():
+        if k.lower() in {"content-type","set-cookie","cache-control","content-disposition","location","etag","last-modified"}:
+            if k.lower()=="location" and isinstance(v,str) and v.startswith("/"):
+                v=f"/bridge/pc/{service}"+v
+            out_headers[k]=v
+    return (data,status,out_headers)
+
 
 class User(Base):
     __tablename__='users'
@@ -93,14 +174,14 @@ def admin_only(u):
 
 @app.get('/')
 def root():
-    return jsonify({'ok':True,'service':'METOT Live Sync Server','version':'11.4.83','utc':now_iso()})
+    return jsonify({'ok':True,'service':'METOT Live Sync Server','version':'11.4.84','utc':now_iso()})
 
 @app.get('/health')
 def health():
     try:
         with SessionLocal() as db:
             db.query(User).limit(1).all()
-        return jsonify({'ok':True,'database':'ok','version':'11.4.83'})
+        return jsonify({'ok':True,'database':'ok','version':'11.4.84'})
     except Exception as e:
         return jsonify({'ok':False,'database':'error','error':str(e)}),500
 
@@ -204,6 +285,50 @@ def events():
     with SessionLocal() as db:
         rows=db.query(ChangeEvent).filter(ChangeEvent.id>since).order_by(ChangeEvent.id).limit(limit).all()
         return jsonify({'ok':True,'events':[{'id':x.id,'key':x.doc_key,'version':x.version,'checksum':x.checksum,'actor':x.actor,'created_at':now_iso(x.created_at)} for x in rows],'last_id':rows[-1].id if rows else since})
+
+
+@app.get("/bridge")
+@app.get("/bridge/")
+def bridge_home():
+    return jsonify({
+        "ok":True,
+        "service":"METOT PC Remote Bridge",
+        "version":"11.4.84",
+        "pc_online": bool(time.time()-BRIDGE_LAST_SEEN <= 45)
+    })
+
+@app.route("/bridge/pc/<service>/", defaults={"path":""}, methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS","HEAD"])
+@app.route("/bridge/pc/<service>/<path:path>", methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS","HEAD"])
+def bridge_pc(service,path):
+    return _bridge_proxy(service,path)
+
+@app.get("/bridge/agent/next")
+def bridge_agent_next():
+    global BRIDGE_LAST_SEEN
+    if not bridge_auth_ok():
+        return jsonify({"error":"Bridge yetkisi geçersiz."}),403
+    BRIDGE_LAST_SEEN=time.time()
+    try:
+        job=BRIDGE_QUEUE.get(timeout=25)
+    except queue.Empty:
+        return ("",204)
+    return jsonify(job)
+
+@app.post("/bridge/agent/respond")
+def bridge_agent_respond():
+    global BRIDGE_LAST_SEEN
+    if not bridge_auth_ok():
+        return jsonify({"error":"Bridge yetkisi geçersiz."}),403
+    BRIDGE_LAST_SEEN=time.time()
+    d=request.get_json(silent=True) or {}
+    jid=str(d.get("id") or "")
+    with BRIDGE_LOCK:
+        item=BRIDGE_WAITERS.get(jid)
+        if not item:
+            return jsonify({"ok":False,"ignored":True}),200
+        item["response"]=d
+        item["event"].set()
+    return jsonify({"ok":True})
 
 if __name__=='__main__':
     app.run(host='0.0.0.0',port=int(os.environ.get('PORT','10000')))

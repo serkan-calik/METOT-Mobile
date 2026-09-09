@@ -7,7 +7,7 @@ cd /d "%~dp0"
 
 echo.
 echo ============================================================
-echo   METOT MOBILE v11.4.82 FINAL - VS CODE APK BUILD
+echo   METOT MOBILE v11.4.84 FINAL - VS CODE APK BUILD
 echo ============================================================
 echo.
 
@@ -56,7 +56,7 @@ if not exist "%APK%" (
   goto :FAIL
 )
 
-copy /Y "%APK%" "%~dp0METOT-Mobile-v11.4.82.apk" >nul
+copy /Y "%APK%" "%~dp0METOT-Mobile-v11.4.84.apk" >nul
 
 echo.
 echo ============================================================
@@ -64,9 +64,9 @@ echo   APK BASARIYLA OLUSTURULDU
 echo ============================================================
 echo.
 echo Hazir dosya:
-echo %~dp0METOT-Mobile-v11.4.82.apk
+echo %~dp0METOT-Mobile-v11.4.84.apk
 echo.
-explorer /select,"%~dp0METOT-Mobile-v11.4.82.apk"
+explorer /select,"%~dp0METOT-Mobile-v11.4.84.apk"
 pause
 exit /b 0
 
