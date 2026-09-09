@@ -1,0 +1,19 @@
+METOT MOBILE v11.4.82 — GITHUB CLOUD APK BUILD
+
+1) Bu ZIP'i bilgisayarda çıkarın.
+2) GitHub'daki METOT-Mobile repository sayfasında "uploading an existing file" seçin.
+3) Çıkardığınız klasörün İÇİNDEKİ:
+   - .github
+   - android_client
+   - GITHUB_APK_KULLANIM.txt
+   öğelerini repository'ye yükleyin.
+4) Commit changes butonuna basın.
+5) GitHub üst menüden Actions sekmesine geçin.
+6) "Build METOT Mobile APK" workflow'unu açın.
+7) "Run workflow" > "Run workflow" seçin.
+8) İşlem yeşil tamamlanınca aynı sayfanın altındaki Artifacts bölümünden
+   "METOT-Mobile-APK" dosyasını indirin.
+9) İndirilen ZIP'in içindeki METOT-Mobile.apk dosyasını telefonunuza gönderip kurun.
+
+Bilgisayara Android Studio, Android SDK veya Gradle kurulması gerekmez.
+APK GitHub'ın bulut sunucusunda oluşturulur.
