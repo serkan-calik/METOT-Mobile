@@ -1,0 +1,31 @@
+METOT v11.4.83 LIVE SYNC - ADIM 1
+
+HEDEF
+PC ve telefonun ayni merkezi METOT verisine baglanmasi.
+Ayni kullanici/sifre/rol yapisinin kullanilmasi.
+PC veya telefonda yapilan degisikligin diger tarafa aktarilmasi.
+
+GITHUB'A YUKLENECEKLER
+- server/
+- pc_live_sync/
+- render.yaml
+
+RENDER WEB SERVICE
+Language: Python 3
+Branch: main
+Root Directory: server
+Build Command: pip install -r requirements.txt
+Start Command: gunicorn -w 2 -b 0.0.0.0:$PORT app:app
+
+DATABASE
+Kalici veri icin Postgres zorunludur. Render'da Postgres olusturup DATABASE_URL ortam degiskenine baglayin.
+
+ENVIRONMENT VARIABLES
+METOT_SYNC_SECRET = uzun rastgele bir gizli anahtar
+METOT_ADMIN_USER = PC'deki mevcut admin kullanici adiniz
+METOT_ADMIN_PASSWORD = PC'de kullandiginiz ayni admin sifresi
+DATABASE_URL = Postgres baglanti adresi
+
+SONRAKI ADIM
+Render URL olustuktan sonra PC sync agent ve Android istemci bu URL'ye baglanacak.
+Telefon arayuzu PC modulleriyle ayni veri ve yetki yapisina tasinacak.

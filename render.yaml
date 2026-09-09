@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: metot-live-sync
+    runtime: python
+    rootDir: server
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 2 -b 0.0.0.0:$PORT app:app
+    healthCheckPath: /health
