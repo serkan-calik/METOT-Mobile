@@ -32,27 +32,41 @@ def bridge_auth_ok():
     return bool(BRIDGE_SECRET) and supplied == BRIDGE_SECRET
 
 def _bridge_rewrite_text(text, service):
+    """Keep root-relative browser navigation inside the selected PC service proxy."""
     prefix=f"/bridge/pc/{service}"
-    # Root-relative assets and API requests stay on the same proxied local service.
-    replacements=[
-        ('href="/static/', f'href="{prefix}/static/'),
-        ("href='/static/", f"href='{prefix}/static/"),
-        ('src="/static/', f'src="{prefix}/static/'),
-        ("src='/static/", f"src='{prefix}/static/"),
-        ('url("/static/', f'url("{prefix}/static/'),
-        ("url('/static/", f"url('{prefix}/static/"),
-        ("fetch('/api/", f"fetch('{prefix}/api/"),
-        ('fetch("/api/', f'fetch("{prefix}/api/'),
-        ("api('/api/", f"api('{prefix}/api/"),
-        ('api("/api/', f'api("{prefix}/api/'),
-        ('action="/', f'action="{prefix}/'),
-    ]
-    for a,b in replacements:
-        text=text.replace(a,b)
-    if service=="shell":
-        for path in ["approvals","manager-ai","ai-office","simulation-center","mobile","manifest.webmanifest","service-worker.js"]:
-            text=text.replace(f"'{('/'+path)}'", f"'{prefix}/{path}'")
-            text=text.replace(f'"{("/"+path)}"', f'"{prefix}/{path}"')
+
+    attr_re = re.compile(r"(?P<attr>\b(?:href|src|action|data-src)\s*=\s*)(?P<q>[\"'])(?P<url>/(?!/)[^\"']*)(?P=q)", re.I)
+    def _attr(m):
+        url=m.group('url')
+        if url.startswith('/bridge/pc/'):
+            return m.group(0)
+        return f"{m.group('attr')}{m.group('q')}{prefix}{url}{m.group('q')}"
+    text=attr_re.sub(_attr,text)
+
+    css_re = re.compile(r"url\(\s*(?P<q>[\"'])(?P<url>/(?!/)[^\"']*)(?P=q)\s*\)", re.I)
+    def _css(m):
+        url=m.group('url')
+        if url.startswith('/bridge/pc/'):
+            return m.group(0)
+        return f"url({m.group('q')}{prefix}{url}{m.group('q')})"
+    text=css_re.sub(_css,text)
+
+    call_re = re.compile(r"(?P<fn>\b(?:fetch|api|open|assign|replace)\s*\(\s*)(?P<q>[\"'])(?P<url>/(?!/)[^\"']*)(?P=q)", re.I)
+    def _call(m):
+        url=m.group('url')
+        if url.startswith('/bridge/pc/'):
+            return m.group(0)
+        return f"{m.group('fn')}{m.group('q')}{prefix}{url}{m.group('q')}"
+    text=call_re.sub(_call,text)
+
+    nav_re = re.compile(r"(?P<lhs>\b(?:window\.)?location(?:\.href)?\s*=\s*)(?P<q>[\"'])(?P<url>/(?!/)[^\"']*)(?P=q)", re.I)
+    def _nav(m):
+        url=m.group('url')
+        if url.startswith('/bridge/pc/'):
+            return m.group(0)
+        return f"{m.group('lhs')}{m.group('q')}{prefix}{url}{m.group('q')}"
+    text=nav_re.sub(_nav,text)
+
     return text
 
 def _bridge_proxy(service, path=""):
@@ -60,7 +74,7 @@ def _bridge_proxy(service, path=""):
         return jsonify({"error":"Bilinmeyen servis"}),404
     # If the PC agent is not connected, fail quickly instead of leaving the phone hanging.
     if time.time()-BRIDGE_LAST_SEEN > 45:
-        return ("METOT PC bağlantısı aktif değil. PC'de METOT v11.4.84 açık olmalıdır.",503,{"Content-Type":"text/plain; charset=utf-8"})
+        return ("METOT PC bağlantısı aktif değil. PC'de METOT v11.4.85 açık olmalıdır.",503,{"Content-Type":"text/plain; charset=utf-8"})
     jid=uuid.uuid4().hex
     body=request.get_data(cache=True) or b""
     headers={}
@@ -174,14 +188,14 @@ def admin_only(u):
 
 @app.get('/')
 def root():
-    return jsonify({'ok':True,'service':'METOT Live Sync Server','version':'11.4.84','utc':now_iso()})
+    return jsonify({'ok':True,'service':'METOT Live Sync Server','version':'11.4.86','utc':now_iso()})
 
 @app.get('/health')
 def health():
     try:
         with SessionLocal() as db:
             db.query(User).limit(1).all()
-        return jsonify({'ok':True,'database':'ok','version':'11.4.84'})
+        return jsonify({'ok':True,'database':'ok','version':'11.4.86'})
     except Exception as e:
         return jsonify({'ok':False,'database':'error','error':str(e)}),500
 
@@ -293,7 +307,7 @@ def bridge_home():
     return jsonify({
         "ok":True,
         "service":"METOT PC Remote Bridge",
-        "version":"11.4.84",
+        "version":"11.4.86",
         "pc_online": bool(time.time()-BRIDGE_LAST_SEEN <= 45)
     })
 
